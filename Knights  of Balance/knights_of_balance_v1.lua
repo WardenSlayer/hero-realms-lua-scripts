@@ -591,7 +591,7 @@ function cleric_shining_breastplate_carddef()
         frame = "frames/Cleric_CardFrame",
         cardTypeLabel = "Magical Armor",
         xmlText =[[<hlayout spacing="1" forcewidth="true">
-    <icon text="{requiresHealth_10}" fontsize="90"/>    
+    <icon text="{requiresHealth_25}" fontsize="90"/>    
     <text text="If you are at full health or have +{health} this turn,
 put a champion without a cost from your discard into play." fontsize="18"/>
     <text text=" " fontsize="80"/>
@@ -638,7 +638,7 @@ put a champion without a cost from your discard into play." fontsize="18"/>
                 ),
                 trigger = gainedHealthTrigger,
                 cost = expendCost,
-                check = getPlayerHealth(currentPid).gte(10).And(noCostChamps.count().gte(1)),
+                check = getPlayerHealth(currentPid).gte(25).And(noCostChamps.count().gte(1)),
                 tags = { toughestTag }
             })
         },
@@ -1173,7 +1173,7 @@ function bard_coat_of_encores_carddef()
         xmlText = [[<hlayout spacing="6">
 <icon text="{requiresHealth_30}" fontsize="90"/>			
 <vlayout forceheight="true" spacing="-10">
-<text text="Discard a Song or a Gold from your hand.
+<text text="Discard 1.
 If you do, put a Song from your deck or discard pile into your hand." fontsize="22"/>
 </vlayout>
 </hlayout>]]
@@ -1206,10 +1206,10 @@ If you do, put a Song from your deck or discard pile into your hand." fontsize="
             createAbility({
                 id = card_name .. "_ability",
                 effect = pushTargetedEffect({
-                    desc = "Discard a Gold or a Song to return a Song to your hand.",
+                    desc = "Discard a card to return a Song to your hand.",
                     min = 0,
                     max = 1,
-                    validTargets = currentHand().where(isCardType(songType).Or(hasCardTag(goldTag))),
+                    validTargets = currentHand(),
                     targetEffect = discardTarget().seq(pushChoiceEffect({
 						choices = {
 							{
@@ -1241,7 +1241,7 @@ If you do, put a Song from your deck or discard pile into your hand." fontsize="
                 }),
                 cost = expendCost,
                 trigger = uiTrigger,
-                check = getPlayerHealth(currentPid).gte(30).And(currentHand().where(isCardType(songType).Or(hasCardTag(goldTag))).count().gte(1)),
+                check = getPlayerHealth(currentPid).gte(30).And(currentHand().count().gte(1)),
                 promptType = showPrompt,
                 tags = { expendTag },
                 aiPriority = toIntExpression(100),
