@@ -598,6 +598,8 @@ put a champion without a cost from your discard into play." fontsize="18"/>
 </hlayout>]]
     })
 	local noCostChamps = selectLoc(loc(currentPid, discardPloc)).where(isCardChampion().And(getCardCost().eq(0)))
+    local gainedHealthKey = "gainedHealthThisTurn"
+    local gainedHealthSlot = createPlayerSlot({ key = gainedHealthKey, expiry = { endOfTurnExpiry } })
     return createMagicArmorDef({
         id = card_name,
         name = "Shining Breastplate",
@@ -619,26 +621,20 @@ put a champion without a cost from your discard into play." fontsize="18"/>
                         tags = {toughestTag}                        
                     }
                 ),
-                trigger = startOfTurnTrigger,
+                trigger = uiTrigger,
                 cost = expendCost,
-                check = getPlayerHealth(currentPid).eq(getPlayerMaxHealth(currentPid)).And(noCostChamps.count().gte(1)),
+                check = getPlayerHealth(currentPid).eq(getPlayerMaxHealth(currentPid))
+                            .Or(hasPlayerSlot(currentPlayer(), gainedHealthKey))
+                            .And(noCostChamps.count().gte(1))
+                            .And(getPlayerHealth(currentPid).gte(25)),
                 tags = { gainCombatTag }
             }),
             createAbility({
-                id = card_name .. "_auto_armor_on_health_ability",
-                effect = pushTargetedEffect(
-                    {
-                        desc = "Choose a champion without a cost to put in play",
-                        validTargets = noCostChamps,
-                        min = 0,
-                        max = 1,
-                        targetEffect = moveTarget(currentInPlayLoc),
-                        tags = {toughestTag}                        
-                    }
-                ),
+                id = card_name .. "_track_health_gained",
+                effect = showTextEffect("Congrats on the heal!").seq(
+                addSlotToPlayerEffect(currentPlayer(), gainedHealthSlot)),
                 trigger = gainedHealthTrigger,
-                cost = expendCost,
-                check = getPlayerHealth(currentPid).gte(25).And(noCostChamps.count().gte(1)),
+                cost = noCost,
                 tags = { toughestTag }
             })
         },
