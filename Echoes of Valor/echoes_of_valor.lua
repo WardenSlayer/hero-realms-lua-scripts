@@ -13,14 +13,14 @@ function p1BuffDef()
             createAbility({
                 id = "expend_all_skills_start",
                 trigger = startOfGameTrigger,
-                effect = moveTarget(loc(ownerPid, asidePloc)).apply(selectLoc(loc(ownerPid, skillsPloc)))
+                effect = moveTarget(loc(ownerPid, skillSacrificePloc)).apply(selectLoc(loc(ownerPid, skillsPloc)))
             }),
             createAbility({
                 id = "return_all_skills",
                 trigger = endOfTurnTrigger,
                 check = getTurnsPlayed(ownerPid).lte(1)
                     .And(selectLoc(loc(ownerPid, discardPloc)).count().lte(0)),
-                effect = moveTarget(loc(ownerPid, skillsPloc)).apply(selectLoc(loc(ownerPid, asidePloc)))
+                effect = moveTarget(loc(ownerPid, skillsPloc)).apply(selectLoc(loc(ownerPid, skillSacrificePloc)))
             }),
             createAbility({
                 id = "draw_logic_non_elves",
@@ -106,7 +106,8 @@ function may_i_carddef()
                 id = "cleanMarket",
                 trigger = onAcquireTrigger,
                 effect = sacrificeTarget().apply(selectLoc(centerRowLoc).union(selectLoc(loc(currentPid, discardPloc))).where(isCardType(noStealType)))
-                    .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, asidePloc))))
+                    .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))
+                                        .seq(createCardEffect(preventDualAbilityUse(), loc(currentPid, buffsPloc)))
             })
         },
         layout = createLayout({
@@ -158,7 +159,8 @@ function allow_me_carddef()
                 id = "cleanMarket",
                 trigger = onAcquireTrigger,
                 effect = sacrificeTarget().apply(selectLoc(centerRowLoc).union(selectLoc(loc(currentPid, discardPloc))).where(isCardType(noStealType)))
-                    .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, asidePloc))))
+                    .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))
+                    .seq(createCardEffect(preventDualAbilityUse(), loc(currentPid, buffsPloc)))
             }),
         },
         layout = createLayout({
@@ -286,7 +288,7 @@ function let_s_see_carddef()
                     .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)),
                 effect = randomEffect({
                     valueItem(1, drawCardsEffect(3).seq(drawToLocationEffect(5, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
-                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, asidePloc))))),
+                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))),
                     valueItem(1, drawCardsEffect(0).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))),
                 })
             }),
@@ -297,7 +299,7 @@ function let_s_see_carddef()
                     .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)),
                 effect = randomEffect({
                     valueItem(1, drawCardsEffect(1).seq(drawToLocationEffect(5, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
-                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, asidePloc))))),
+                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))),
                     valueItem(1, drawCardsEffect(0).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))),
                 })
             }),
@@ -308,7 +310,7 @@ function let_s_see_carddef()
                     .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
                 effect = randomEffect({
                     valueItem(1, drawCardsEffect(3).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
-                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, asidePloc))))),
+                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))),
                     valueItem(1, drawCardsEffect(0).seq(drawToLocationEffect(1, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))),
                 })
             }),
@@ -319,7 +321,7 @@ function let_s_see_carddef()
                     .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
                 effect = randomEffect({
                     valueItem(1, drawCardsEffect(1).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
-                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, asidePloc))))),
+                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))),
                     valueItem(1, drawCardsEffect(0).seq(drawToLocationEffect(1, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))),
                 })
             }),
@@ -327,6 +329,7 @@ function let_s_see_carddef()
                 id = "cleanMarket",
                 trigger = onSacrificeTrigger,
                 effect = sacrificeTarget().apply(selectLoc(centerRowLoc).where(isCardType(noStealType))).seq(sacrificeTarget().apply(selectSource()))
+                    .seq(createCardEffect(preventDualAbilityUse(), loc(currentPid, buffsPloc)))
             }),
         },
         layout = createLayout({
@@ -405,7 +408,7 @@ end
 end
 
 function forceExplosion()
-    --			
+    --If Player 1 did not choose who was going first, player 2 goes first
     return createGlobalBuff({
         id="forced_explosion",
         name = "Forced Explosion",
@@ -424,120 +427,128 @@ function forceExplosion()
     })
 end
 
+function preventDualAbilityUse()
+    --		
+    return createGlobalBuff({
+        id="prevent_dual_ability_use",
+        name = "Prevent Dual Ability Use",
+        abilities = {},
+        cardEffectAbilities = {
+			createCardEffectAbility({
+                id="prevent_dual_use",
+                cost = noCost,
+                trigger =  locationChangedCardTrigger,
+                activations = multipleActivations,
+                effect = ifElseEffect(selectTargets().where(isCardAtLoc(skillSacrificePloc).And(isCardAbility()).And(isCardType(ancestryType).invert())).count().gte(1),
+                                        disableTarget({ endOfTurnExpiry }).apply(selectLoc(loc(currentPid, skillsPloc)).where(isCardAbility().And(isCardType(ancestryType).invert())))
+                                            .seq(sacrificeSelf()),
+                                        nullEffect()
+                                )
+            }),
+        }
+    })
+end
+
 
 --Card Overrides
 --=======================================================================================================
+--
+--Fighter
+--=======================================================================================================
 function fighter_rallying_flag_carddef()
-    local cardLayout = createLayout({
-        name = "Rallying Flag",
-        art = "art/t_fighter_rallying_flag",
-        frame = "frames/Warrior_CardFrame",
-        cardTypeLabel = "Champion",
-        isGuard = true,
-        health = 1,
-        types = { championType, humanType, fighterType },
-        xmlText = [[<vlayout>
-                        <box flexibleheight="1">
-                            <tmpro text="{gold_1}   {combat_1}" fontsize="60"/>
-                        </box>
-                    </vlayout>]]
-    })
-    return createChampionDef({
-        id = "fighter_rallying_flag",
-        name = "Rallying Flag",
-        acquireCost = 0,
-        health = 1,
-        isGuard = true,
-        layout = cardLayout,
-        types = { championType, humanType, fighterType },
-        factions = {},
-        abilities = {
-            createAbility({
-                id = "fighter_rallying_flag",
-                trigger = autoTrigger,
-                activations = multipleActivations,
-                cost = expendCost,
-                effect = gainCombatEffect(1).seq(gainGoldEffect(1))
-            }),
-        }
-    })
-end
-
---=========================================
-function cleric_redeemed_ruinos_carddef()
-    local cardLayout = createLayout({
-        name = "Redeemed Ruinos",
-        art = "art/t_cleric_redeemed_ruinos",
-        frame = "frames/Cleric_CardFrame",
-        cardTypeLabel = "Champion",
-        isGuard = false,
-        health = 2,
-        types = { championType, noStealType, humanType, clericType, noKillType},
-        xmlText = [[<vlayout forceheight="false" spacing="6">
-                        <hlayout spacing="10">
-                        <text text="When stunned, {health_2}." fontsize="32"/>
-                        </hlayout>    
-                        <divider/>
-                        <hlayout forcewidth="true" spacing="10">
-                            <icon text="{expend}" fontsize="52"/>
-                            <vlayout  forceheight="false">
-                        <icon text="{gold_1}" fontsize="46"/>
-                            </vlayout>
-                            <icon text=" " fontsize="20"/>
-                        </hlayout>
-                    </vlayout>
-                    ]]
-    })
-    return createChampionDef({
-        id = "cleric_redeemed_ruinos",
-        name = "Redeemed Ruinos",
-        acquireCost = 0,
-        health = 2,
-        isGuard = false,
-        layout = cardLayout,
-        factions = {},
-        types = { championType, noStealType, humanType, clericType, noKillType},
-        tags = {noAttackButtonTag},
-        abilities = {
-            createAbility({
-                id = "cleric_redeemed_ruinos",
-                trigger = autoTrigger,
-                activations = multipleActivations,
-                cost = expendCost,
-                effect = gainGoldEffect(1)
-            }),
-            createAbility({
-                id = "cleric_redeemed_ruinos_stunned",
-                trigger = onStunTrigger,
-                effect = healPlayerEffect(ownerPid, 2).seq(simpleMessageEffect("2 <sprite name=\"health\"> gained from Redeemed Ruinos")),
-                tags = { gainHealthTag }
-            })
-        }
-    })
-end
-
-function ruinosDrawBuff()
-    return createGlobalBuff({
-        id="cleric_redeemed_ruinos_stunned",
-        name="Ruinos Draw",
-        abilities = {
-            createAbility({
-                id = "ruinos_draw",
-                triggerPriority = 10,
-                trigger = startOfTurnTrigger,
-                cost = sacrificeSelfCost,
-                effect = drawCardsEffect(1)
-            }),
-        },
-        buffDetails = createBuffDetails({
-            name = "Redeemed Ruinos",
-            art = "art/t_cleric_redeemed_ruinos",
-            text = "Draw a card."
+        local cardLayout = createLayout({
+            name = "Rallying Flag",
+            art = "art/t_fighter_rallying_flag",
+            frame = "frames/Warrior_CardFrame",
+            cardTypeLabel = "Champion",
+            isGuard = true,
+            health = 1,
+            types = { championType, humanType, fighterType },
+            xmlText = [[<vlayout>
+                            <box flexibleheight="1">
+                                <tmpro text="{gold_1}   {combat_1}" fontsize="60"/>
+                            </box>
+                        </vlayout>]]
         })
-    })
+        return createChampionDef({
+            id = "fighter_rallying_flag",
+            name = "Rallying Flag",
+            acquireCost = 0,
+            health = 1,
+            isGuard = true,
+            layout = cardLayout,
+            types = { championType, humanType, fighterType },
+            factions = {},
+            abilities = {
+                createAbility({
+                    id = "fighter_rallying_flag",
+                    trigger = autoTrigger,
+                    activations = multipleActivations,
+                    cost = expendCost,
+                    effect = gainCombatEffect(1).seq(gainGoldEffect(1))
+                }),
+            }
+        })
     end
+    --=========================================
+    function fighter_helm_of_fury_carddef()
+        local cardLayout = createLayout({
+            name = "Helm of Fury",
+            art = "art/t_fighter_helm_of_fury",
+            frame = "frames/Warrior_CardFrame",
+            cardTypeLabel = "Magical Armor",
+            xmlText =[[<vlayout>
+                            <hlayout flexibleheight="1">
+                                <box flexiblewidth="1">
+                                    <tmpro text="{requiresHealth_20}" fontsize="72"/>
+                                </box>
+                                <box flexiblewidth="7">
+                                    <tmpro text="If you have a guard in play,&lt;br&gt; gain {gold_1} {combat_1}" fontsize="32" />
+                                </box>
+                            </hlayout>
+                    </vlayout>
+                        ]]
+        })
+        local guardChamps = selectLoc(loc(currentPid, inPlayPloc)).where(isGuard()).count()
+        local disableHelm = disableTarget({ endOfTurnExpiry }).apply(selectLoc(loc(currentPid, skillsPloc)).where(isCardType(magicArmorType)))
+        --
+        return createMagicArmorDef({
+            id = "fighter_helm_of_fury",
+            name = "Helm of Fury",
+            types = {fighterType, magicArmorType, treasureType, headType},
+            layout = cardLayout,
+            layoutPath = "icons/fighter_helm_of_fury",
+            abilities = {
+                    createAbility({
+                        id = "helmGuard",
+                        trigger = autoTrigger,
+                        check = minHealthCurrent(20).And(guardChamps.gte(1)),
+                        effect = gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm)
+                    }),
+                    createAbility({
+                        id = "helmLateGuard",
+                        trigger = onPlayTrigger,
+                        activations = singleActivation,
+                        check = minHealthCurrent(20),
+                        effect = ifElseEffect(guardChamps.gte(1),
+                                                gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm),
+                                                nullEffect()) 
+                    }),
+                    createAbility({
+                        id = "helmHeal",
+                        trigger = gainedHealthTrigger,
+                        activations = singleActivation,
+                        check = minHealthCurrent(20),
+                        effect = ifElseEffect(guardChamps.gte(1),
+                                                gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm),
+                                                nullEffect()) 
+                    }),
+            }        
+        })
+end
 
---=========================================
+--Wizard
+--=======================================================================================================
 function wizard_treasure_map_carddef()
     local cardLayout = createLayout({
         name = "Treasure Map",
@@ -654,62 +665,8 @@ function wizard_treasure_map_carddef()
     })
 end
 
---=========================================
-function barbarian_serrated_hand_axe_carddef()
-	local function isBerserk()
-		return countPlayerSlots(currentPid, berserkSlotKey).gte(1)
-	end
-	
-	local cardLayout = createLayout({
-        name = "Serrated Hand Axe",
-        art = "art/classes/barbarian/serrated_hand_axe",
-        frame = "frames/barbarian_frames/barbarian_item_cardframe",
-        cardTypeLabel = "Item",
-        xmlText =[[<vlayout>
-			<hlayout flexibleheight="4">
-				<vlayout padding="0,20,0,0" flexibleheight="2">
-					<box flexibleheight="2">
-						<tmpro text="{combat_2}" fontsize="55" />
-					</box>
-					<box flexibleheight="1.5">
-						<tmpro text="+4 {combat} if you're Berserk." fontsize="20" />
-					</box>
-				</vlayout>
-			</hlayout>
-		</vlayout>]]
-    })
-
-    return createItemDef({
-        id = "barbarian_serrated_hand_axe",
-        name = "Serrated Hand Axe",
-        description = "<sprite name=\"Point\"><color=#3BF2FF><b>Available at level </b></color> 5",
-        types = { barbarianType, meleeWeaponType, weaponType, axeType },
-        tags = { barbarianGalleryCardTag },
-        level = 5,
-        acquireCost = 0,
-        abilities = {
-            createAbility({
-                id = "barbarian_serrated_hand_axe_ability",
-                effect = gainCombatEffect(2),
-                cost = noCost,
-                trigger = onPlayTrigger,
-                tags = { gainCombatTag,  aiPlayAllTag }
-            }),
-            createAbility({
-                id = "barbarian_serrated_hand_axe_ability_auto",
-                effect = gainCombatEffect(4),
-                cost = noCost,
-                activations = singleActivation,
-                trigger = autoTrigger,
-                check = isBerserk(),
-                tags = { gainCombatTag,  aiPlayAllTag }
-            }),
-        },
-        layout = cardLayout
-    })
-end
-
---=========================================
+--Ranger
+--=======================================================================================================
 function ranger_honed_black_arrow_carddef()
     local cardLayout = createLayout({
         name = "Honed Black Arrow",
@@ -760,6 +717,81 @@ function ranger_honed_black_arrow_carddef()
 						where(isCardType(bowType)).count().gte(1), toIntExpression(300), toIntExpression(-1))
 				})
                 },
+    })
+end
+
+--Cleric
+--=======================================================================================================
+function cleric_redeemed_ruinos_carddef()
+    local cardLayout = createLayout({
+        name = "Redeemed Ruinos",
+        art = "art/t_cleric_redeemed_ruinos",
+        frame = "frames/Cleric_CardFrame",
+        cardTypeLabel = "Champion",
+        isGuard = false,
+        health = 2,
+        types = { championType, noStealType, humanType, clericType, noKillType},
+        xmlText = [[<vlayout forceheight="false" spacing="6">
+                        <hlayout spacing="10">
+                        <text text="When stunned, {health_2}." fontsize="32"/>
+                        </hlayout>    
+                        <divider/>
+                        <hlayout forcewidth="true" spacing="10">
+                            <icon text="{expend}" fontsize="52"/>
+                            <vlayout  forceheight="false">
+                        <icon text="{gold_1}" fontsize="46"/>
+                            </vlayout>
+                            <icon text=" " fontsize="20"/>
+                        </hlayout>
+                    </vlayout>
+                    ]]
+    })
+    return createChampionDef({
+        id = "cleric_redeemed_ruinos",
+        name = "Redeemed Ruinos",
+        acquireCost = 0,
+        health = 2,
+        isGuard = false,
+        layout = cardLayout,
+        factions = {},
+        types = { championType, noStealType, humanType, clericType, noKillType},
+        tags = {noAttackButtonTag},
+        abilities = {
+            createAbility({
+                id = "cleric_redeemed_ruinos",
+                trigger = autoTrigger,
+                activations = multipleActivations,
+                cost = expendCost,
+                effect = gainGoldEffect(1)
+            }),
+            createAbility({
+                id = "cleric_redeemed_ruinos_stunned",
+                trigger = onStunTrigger,
+                effect = healPlayerEffect(ownerPid, 2).seq(simpleMessageEffect("2 <sprite name=\"health\"> gained from Redeemed Ruinos")),
+                tags = { gainHealthTag }
+            })
+        }
+    })
+end
+
+function ruinosDrawBuff()
+    return createGlobalBuff({
+        id="cleric_redeemed_ruinos_stunned",
+        name="Ruinos Draw",
+        abilities = {
+            createAbility({
+                id = "ruinos_draw",
+                triggerPriority = 10,
+                trigger = startOfTurnTrigger,
+                cost = sacrificeSelfCost,
+                effect = drawCardsEffect(1)
+            }),
+        },
+        buffDetails = createBuffDetails({
+            name = "Redeemed Ruinos",
+            art = "art/t_cleric_redeemed_ruinos",
+            text = "Draw a card."
+        })
     })
 end
 
@@ -828,10 +860,11 @@ function cleric_shining_breastplate_carddef()
         frame = "frames/Cleric_CardFrame",
         cardTypeLabel = "Magical Armor",
         xmlText =[[<hlayout spacing="1" forcewidth="true">
-                            <icon text="{requiresHealth_25}" fontsize="90"/>    
-                            <text text="If you are at full health or have +{health} this turn,put a champion without a cost from your discard into play." fontsize="18"/>
-                            <text text=" " fontsize="80"/>
-                    </hlayout>]]
+                    <icon text="{requiresHealth_25}" fontsize="90"/>    
+                    <text text="If you are at full health or have +{health} this turn,
+                put a champion without a cost from your discard into play." fontsize="18"/>
+                    <text text=" " fontsize="80"/>
+                </hlayout>]]
     })
 	local noCostChamps = selectLoc(loc(currentPid, discardPloc)).where(isCardChampion().And(getCardCost().eq(0)))
     local gainedHealthKey = "gainedHealthThisTurn"
@@ -872,14 +905,15 @@ function cleric_shining_breastplate_carddef()
                 trigger = gainedHealthTrigger,
                 cost = noCost,
                 tags = { toughestTag }
-            })
+            }),
         },
         layoutPath = "icons/" .. card_name,
         layout = cardLayout
     })
 end
 
---=========================================
+--Thief
+--=======================================================================================================
 function thief_silent_boots_carddef()
     --
     local cardLayout = createLayout({
@@ -892,7 +926,7 @@ function thief_silent_boots_carddef()
                                             <tmpro text="{requiresHealth_10}" fontsize="72"/>
                                         </box>
                                         <box flexiblewidth="7">
-                                            <tmpro text="Reveal the top two cards from the market deck and sacrifice one. You may acquire the other for 1 {gold} less or put it back." fontsize="20" />
+                                            <tmpro text="Reveal the top two cards from the market deck and sacrifice one. You may acquire the other for &lt;br&gt;1 {gold} less or put it back." fontsize="20" />
                                         </box>
                                     </hlayout>
                                 </vlayout>]]
@@ -984,8 +1018,8 @@ function thief_enchanted_garrote_carddef()
                     </hlayout>
                 </vlayout>]]
     })
-    --
-    local stunnedChamps = selectLoc(loc(oppPid, discardPloc)).where(isCardStunned()).count()
+    --Discard for chapions, Sacrificed for tokens
+    local stunnedChamps = selectLoc(loc(oppPid, discardPloc)).union(selectLoc(loc(oppPid, sacrificePloc))).where(isCardStunned()).count()
     --
     return createItemDef({
         id = "thief_enchanted_garrote",
@@ -1021,65 +1055,65 @@ function thief_enchanted_garrote_carddef()
     })
 end
 
---=========================================
-function fighter_helm_of_fury_carddef()
-    local cardLayout = createLayout({
-        name = "Helm of Fury",
-        art = "art/t_fighter_helm_of_fury",
-        frame = "frames/Warrior_CardFrame",
-        cardTypeLabel = "Magical Armor",
+
+--Barbarian
+--=======================================================================================================
+function barbarian_serrated_hand_axe_carddef()
+	local function isBerserk()
+		return countPlayerSlots(currentPid, berserkSlotKey).gte(1)
+	end
+	
+	local cardLayout = createLayout({
+        name = "Serrated Hand Axe",
+        art = "art/classes/barbarian/serrated_hand_axe",
+        frame = "frames/barbarian_frames/barbarian_item_cardframe",
+        cardTypeLabel = "Item",
         xmlText =[[<vlayout>
-                        <hlayout flexibleheight="1">
-                            <box flexiblewidth="1">
-                                <tmpro text="{requiresHealth_20}" fontsize="72"/>
-                            </box>
-                            <box flexiblewidth="7">
-                                <tmpro text="If you have a guard in play,&lt;br&gt; gain {gold_1} {combat_1}" fontsize="32" />
-                            </box>
-                        </hlayout>
-                </vlayout>
-                    ]]
+			<hlayout flexibleheight="4">
+				<vlayout padding="0,20,0,0" flexibleheight="2">
+					<box flexibleheight="2">
+						<tmpro text="{combat_2}" fontsize="55" />
+					</box>
+					<box flexibleheight="1.5">
+						<tmpro text="+4 {combat} if you're Berserk." fontsize="20" />
+					</box>
+				</vlayout>
+			</hlayout>
+		</vlayout>]]
     })
-    local guardChamps = selectLoc(loc(currentPid, inPlayPloc)).where(isGuard()).count()
-    local disableHelm = disableTarget({ endOfTurnExpiry }).apply(selectLoc(loc(currentPid, skillsPloc)).where(isCardType(magicArmorType)))
-    --local disableHelm = nullEffect()
-    --
-    return createMagicArmorDef({
-        id = "fighter_helm_of_fury",
-        name = "Helm of Fury",
-        types = {fighterType, magicArmorType, treasureType, headType},
-        layout = cardLayout,
-        layoutPath = "icons/fighter_helm_of_fury",
+
+    return createItemDef({
+        id = "barbarian_serrated_hand_axe",
+        name = "Serrated Hand Axe",
+        description = "<sprite name=\"Point\"><color=#3BF2FF><b>Available at level </b></color> 5",
+        types = { barbarianType, meleeWeaponType, weaponType, axeType },
+        tags = { barbarianGalleryCardTag },
+        level = 5,
+        acquireCost = 0,
         abilities = {
-                createAbility({
-                    id = "helmGuard",
-                    trigger = autoTrigger,
-                    check = minHealthCurrent(20).And(guardChamps.gte(1)),
-                    effect = gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm)
-                }),
-                createAbility({
-                    id = "helmLateGuard",
-                    trigger = onPlayTrigger,
-                    activations = singleActivation,
-                    check = minHealthCurrent(20),
-                    effect = ifElseEffect(guardChamps.gte(1),
-                                            gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm),
-                                            nullEffect()) 
-                }),
-                createAbility({
-                    id = "helmHeal",
-                    trigger = gainedHealthTrigger,
-                    activations = singleActivation,
-                    check = minHealthCurrent(20),
-                    effect = ifElseEffect(guardChamps.gte(1),
-                                            gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm),
-                                            nullEffect()) 
-                })
-        }        
+            createAbility({
+                id = "barbarian_serrated_hand_axe_ability",
+                effect = gainCombatEffect(2),
+                cost = noCost,
+                trigger = onPlayTrigger,
+                tags = { gainCombatTag,  aiPlayAllTag }
+            }),
+            createAbility({
+                id = "barbarian_serrated_hand_axe_ability_auto",
+                effect = gainCombatEffect(4),
+                cost = noCost,
+                activations = singleActivation,
+                trigger = autoTrigger,
+                check = isBerserk(),
+                tags = { gainCombatTag,  aiPlayAllTag }
+            }),
+        },
+        layout = cardLayout
     })
 end
 
---=========================================
+--Alchemist
+--=======================================================================================================
 function alchemist_spectrum_spectacles_carddef()
     local cardLayout = createLayout({
         name = "Spectrum Spectacles",
@@ -1147,7 +1181,7 @@ function alchemist_spectrum_spectacles_carddef()
                         </box>
                     </hlayout>
                 </vlayout>]]
-    })
+            })
     --
     return createMagicArmorDef({
         id = "alchemist_spectrum_spectacles",
@@ -1201,7 +1235,8 @@ function alchemist_spectrum_spectacles_carddef()
     })
 end
 
---=========================================	
+--Necromancer
+--=======================================================================================================	
 function necromancer_plague_belt_carddef()
     local card_name = "necromancer_plague_belt"
     local selector = selectLoc(currentInPlayLoc).where(isCardName("necromancer_skeleton_servant"))
@@ -1264,7 +1299,7 @@ local function createSkeletonInPlay(card)
     )
 end
 
---=========================================	
+
 function necromancer_voidstone_carddef()
     local card_name = "necromancer_voidstone"
     local selector = sacrificeSelector(selectLoc(currentDiscardLoc).union(selectLoc(centerRowLoc)))
@@ -1312,7 +1347,8 @@ function necromancer_voidstone_carddef()
     })
 end
 
---========================================================================
+--Bard
+--=======================================================================================================	
 function bard_coat_of_encores_carddef()
     local card_name = "bard_coat_of_encores"
 	local cardLayout = createLayout({
@@ -1321,11 +1357,11 @@ function bard_coat_of_encores_carddef()
         frame = "frames/bard_frames/bard_item_cardframe",
         cardTypeLabel = "Magical Armor",
         xmlText = [[<hlayout spacing="6">
-                    <icon text="{requiresHealth_30}" fontsize="90"/>			
-                    <vlayout forceheight="true" spacing="-10">
-                    <text text="Discard 1.&lt;br&gt;If you do, put a Song from your deck or discard pile into your hand." fontsize="22"/>
-                    </vlayout>
-                    </hlayout>]]
+                <icon text="{requiresHealth_30}" fontsize="90"/>			
+                <vlayout forceheight="true" spacing="-10">
+                <text text="Discard 1.&lt;br&gt;If you do, put a Song from your deck or discard pile into your hand." fontsize="22"/>
+                </vlayout>
+                </hlayout>]]
     })
 	local deckLayout = createLayout({
         name = "Coat of Encores",
