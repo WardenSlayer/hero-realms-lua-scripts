@@ -5,98 +5,389 @@ require 'timeoutai'
 require 'hardai_2'
 require 'aggressiveai'
 
--- Game Setup
---=======================================================================================================
-function setupGame(g)
-    registerCards(g, {
+function p1BuffDef()
+    return createGlobalBuff({
+        id = "starting_player_logic",
+        name = "Starting Player, skills and Ogre",
+        abilities = {
+            createAbility({
+                id = "expend_all_skills_start",
+                trigger = startOfGameTrigger,
+                effect = moveTarget(loc(ownerPid, skillSacrificePloc)).apply(selectLoc(loc(ownerPid, skillsPloc)))
+            }),
+            createAbility({
+                id = "return_all_skills",
+                trigger = endOfTurnTrigger,
+                check = getTurnsPlayed(ownerPid).lte(1)
+                    .And(selectLoc(loc(ownerPid, discardPloc)).count().lte(0)),
+                effect = moveTarget(loc(ownerPid, skillsPloc)).apply(selectLoc(loc(ownerPid, skillSacrificePloc)))
+            }),
+            createAbility({
+                id = "draw_logic_non_elves",
+                trigger = endOfTurnTrigger,
+                check = selectLoc(loc(ownerPid, buffsPloc)).where(isCardType(elfType)).count().lte(0),
+                effect = drawCardsEffect(5)
+            }),
+            createAbility({
+                id = "draw_logic_elf_t1_starter",
+                trigger = endOfTurnTrigger,
+                check = getTurnsPlayed(ownerPid).lte(1)
+                    .And(selectLoc(loc(ownerPid, buffsPloc)).where(isCardType(elfType)).count().gte(1))
+                    .And(
+                        (selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)
+                            .And(selectLoc(loc(oppPid, handPloc)).count().eq(5)))
+                        .Or(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                            .And(selectLoc(loc(oppPid, handPloc)).count().eq(3)))
+                    ),
+                effect = drawCardsEffect(5)
+            }),
+            createAbility({
+                id = "draw_logic_elf_t1_second",
+                trigger = endOfTurnTrigger,
+                check = getTurnsPlayed(ownerPid).lte(1)
+                    .And(selectLoc(loc(ownerPid, discardPloc)).count().lte(0))
+                    .And(selectLoc(loc(ownerPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = drawCardsEffect(3)
+            }),
+            createAbility({
+                id = "draw_logic_elf_t2+",
+                trigger = endOfTurnTrigger,
+                check = getTurnsPlayed(ownerPid).gte(2)
+                    .And(selectLoc(loc(ownerPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = drawCardsEffect(5)
+            }),
+            createAbility({
+                id = "ogre_affordability",
+                trigger = startOfGameTrigger,
+                check = selectLoc(loc(ownerPid, buffsPloc)).where(isCardType(ogreType)).count().gte(1),
+                effect = gainGoldEffect(1)
+            })
+        }
     })
+end
 
+function may_i_carddef()
+    return createActionDef({
+        id = "may_i",
+        name = "May I?",
+        types = {actionType, noStealType},
+        acquireCost = 0,
+        abilities = {
+            createAbility({
+                id = "noElves",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc))
+                    .union(selectLoc(loc(oppPid, buffsPloc)))
+                    .where(isCardType(elfType)).count().lte(0),
+                effect = drawCardsEffect(3).seq(drawToLocationEffect(5, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "oneElf_currentPid",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)),
+                effect = drawCardsEffect(1).seq(drawToLocationEffect(5, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "oneElf_oppPid",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = drawCardsEffect(3).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "twoElves",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = drawCardsEffect(1).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "cleanMarket",
+                trigger = onAcquireTrigger,
+                effect = sacrificeTarget().apply(selectLoc(centerRowLoc).union(selectLoc(loc(currentPid, discardPloc))).where(isCardType(noStealType)))
+                    .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))
+                                        .seq(createCardEffect(preventDualAbilityUse(), loc(currentPid, buffsPloc)))
+            })
+        },
+        layout = createLayout({
+            name = "May I?",
+            art = "art/epicart/dark_offering",
+            frame = "frames/coop_campaign_cardframe",
+            text = "You start the game.",
+        })
+    })
+end
+
+function allow_me_carddef()
+    return createActionDef({
+        id = "allow_me",
+        name = "Allow Me",
+        types = {actionType, noStealType},
+        acquireCost = 0,
+        abilities = {
+            createAbility({
+                id = "noElves",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc))
+                    .union(selectLoc(loc(oppPid, buffsPloc)))
+                    .where(isCardType(elfType)).count().lte(0),
+                effect = drawCardsEffect(3).seq(drawToLocationEffect(5, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "oneElf_currentPid",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)),
+                effect = drawCardsEffect(1).seq(drawToLocationEffect(5, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "oneElf_oppPid",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = drawCardsEffect(3).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "twoElves",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = drawCardsEffect(1).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "cleanMarket",
+                trigger = onAcquireTrigger,
+                effect = sacrificeTarget().apply(selectLoc(centerRowLoc).union(selectLoc(loc(currentPid, discardPloc))).where(isCardType(noStealType)))
+                    .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))
+                    .seq(createCardEffect(preventDualAbilityUse(), loc(currentPid, buffsPloc)))
+            }),
+        },
+        layout = createLayout({
+            name = "Allow Me",
+            art = "art/epicart/cast_out",
+            frame = "frames/coop_campaign_cardframe",
+            text = "You start the game.",
+        })
+    })
+end
+
+function after_you_carddef()
+    return createActionDef({
+        id = "after_you",
+        name = "After You",
+        types = {actionType, noStealType},
+        acquireCost = 0,
+        abilities = {
+            createAbility({
+                id = "noElves",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc))
+                    .union(selectLoc(loc(oppPid, buffsPloc)))
+                    .where(isCardType(elfType)).count().lte(0),
+                effect = drawCardsEffect(0).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "oneElf_currentPid",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)),
+                effect = drawCardsEffect(0).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "oneElf_oppPid",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = drawCardsEffect(0).seq(drawToLocationEffect(1, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "twoElves",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = drawCardsEffect(0).seq(drawToLocationEffect(1, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "cleanMarket",
+                trigger = onAcquireTrigger,
+                effect = sacrificeTarget().apply(selectLoc(centerRowLoc).union(selectLoc(loc(currentPid, discardPloc))).where(isCardType(noStealType)))
+            }),
+        },
+        layout = createLayout({
+            name = "After You",
+            art = "art/epicart/inner_peace",
+            frame = "frames/coop_campaign_cardframe",
+            text = "Opponent starts the game.",
+        })
+    })
+end
+
+function go_ahead_carddef()
+    return createActionDef({
+        id = "go_ahead",
+        name = "Please, Go Ahead",
+        types = {actionType, noStealType},
+        acquireCost = 0,
+        abilities = {
+            createAbility({
+                id = "noElves",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc))
+                    .union(selectLoc(loc(oppPid, buffsPloc)))
+                    .where(isCardType(elfType)).count().lte(0),
+                effect = drawCardsEffect(0).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "oneElf_currentPid",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)),
+                effect = drawCardsEffect(0).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "oneElf_oppPid",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = drawCardsEffect(0).seq(drawToLocationEffect(1, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "twoElves",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = drawCardsEffect(0).seq(drawToLocationEffect(1, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+            }),
+            createAbility({
+                id = "cleanMarket",
+                trigger = onAcquireTrigger,
+                effect = sacrificeTarget().apply(selectLoc(centerRowLoc).union(selectLoc(loc(currentPid, discardPloc))).where(isCardType(noStealType)))
+            }),
+        },
+        layout = createLayout({
+            name = "Please, Go Ahead",
+            art = "art/epicart/blind_faith",
+            frame = "frames/coop_campaign_cardframe",
+            text = "Opponent starts the game.",
+        })
+    })
+end
+
+function let_s_see_carddef()
+    return createActionDef({
+        id = "let_s_see",
+        name = "Let's See",
+        types = {actionType, noStealType},
+        acquireCost = 0,
+        abilities = {
+            createAbility({
+                id = "noElves",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)),
+                effect = randomEffect({
+                    valueItem(1, drawCardsEffect(3).seq(drawToLocationEffect(5, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))),
+                    valueItem(1, drawCardsEffect(0).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))),
+                })
+            }),
+            createAbility({
+                id = "oneElf_currentPid",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)),
+                effect = randomEffect({
+                    valueItem(1, drawCardsEffect(1).seq(drawToLocationEffect(5, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))),
+                    valueItem(1, drawCardsEffect(0).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))),
+                })
+            }),
+            createAbility({
+                id = "oneElf_oppPid",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().lte(0)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = randomEffect({
+                    valueItem(1, drawCardsEffect(3).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))),
+                    valueItem(1, drawCardsEffect(0).seq(drawToLocationEffect(1, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))),
+                })
+            }),
+            createAbility({
+                id = "twoElves0",
+                trigger = onAcquireTrigger,
+                check = selectLoc(loc(currentPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)
+                    .And(selectLoc(loc(oppPid, buffsPloc)).where(isCardType(elfType)).count().gte(1)),
+                effect = randomEffect({
+                    valueItem(1, drawCardsEffect(1).seq(drawToLocationEffect(3, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))
+                        .seq(moveTarget(loc(currentPid, skillsPloc)).apply(selectLoc(loc(currentPid, skillSacrificePloc))))),
+                    valueItem(1, drawCardsEffect(0).seq(drawToLocationEffect(1, loc(oppPid, handPloc))).seq(sacrificeTarget().apply(selectSource()))),
+                })
+            }),
+            createAbility({
+                id = "cleanMarket",
+                trigger = onSacrificeTrigger,
+                effect = sacrificeTarget().apply(selectLoc(centerRowLoc).where(isCardType(noStealType))).seq(sacrificeTarget().apply(selectSource()))
+                    .seq(createCardEffect(preventDualAbilityUse(), loc(currentPid, buffsPloc)))
+            }),
+        },
+        layout = createLayout({
+            name = "Let's See",
+            art = "art/epicart/temporize",
+            frame = "frames/coop_campaign_cardframe",
+            text = "Let fate decide.",
+        })
+    })
+end
+
+function setupGame(g) 
+    registerCards(g, {     --- THIS
+        go_ahead_carddef(),
+        let_s_see_carddef(),
+        allow_me_carddef(),
+        after_you_carddef(),
+        may_i_carddef(),
+    })
     standardSetup(g, {
-        description = "Knights of  Balance: A Community Game Balancing Effort.",
+        description = "Echoes of Valor<br>The Realms Rising Commuity Event<br>Official Script<br>Special Thanks to Emil",
         playerOrder = { plid1, plid2 },
         ai = ai.CreateKillSwitchAi(createAggressiveAI(),  createHardAi2()),
         timeoutAi = createTimeoutAi(),
         opponents = { { plid1, plid2 } },
+        centerRow = { "may_i" , "allow_me" , "let_s_see" , "after_you" , "go_ahead" },  --- THIS
         players = {
             {
                 id = plid1,
-                --isAi = true,
-                startDraw = 3,
+                startDraw = 0,
                 init = {
                     fromEnv = plid1
                 },
                 cards = {
-                    reserve = {
-                        --{ qty = 1, card = wizard_treasure_map_carddef() }
-                        --{ qty = 1, card = ranger_parrot_carddef() }
-                    },
-                    deck = {
-                    },
-                    hand = {
-                        --{ qty = 1, card = thief_enchanted_garrote_carddef() },
-                        --{ qty = 1, card = ranger_parrot_carddef() },
-                        --{ qty = 1, card = cleric_redeemed_ruinos_carddef()},
-                        --{ qty = 2, card = cleric_follower_b_carddef() },
-                        --{ qty = 2, card = cleric_imperial_sailor_carddef() },
-                        --{ qty = 1, card = cleric_brightstar_shield_carddef() },
-                        --{ qty = 1, card = fighter_rallying_flag_carddef() },
-                        --{ qty = 1, card = barbarian_disorienting_headbutt_carddef() },
-                        --{ qty = 2, card = torgen_rocksplitter_carddef() },
-                    },
-                    discard = {
-                        -- { qty = 2, card = torgen_rocksplitter_carddef() },
-                        -- { qty = 2, card = cleric_follower_b_carddef() },
-                        -- { qty = 1, card = cleric_follower_a_carddef() },
-                        -- { qty = 1, card = cleric_veteran_follower_carddef() },
-                        -- { qty = 1, card = cleric_redeemed_ruinos_carddef() },
-                    },
-                    skills = {
-                        --{ qty = 1, card = fighter_helm_of_fury_carddef() },
-                        --{ qty = 1, card = alchemist_spectrum_spectacles_carddef() }
-                    },
                     buffs = {
-                        drawCardsCountAtTurnEndDef(5),
+                        drawCardsCountAtTurnEndDef(0),--- THIS
+                        p1BuffDef(),--- THIS
                         discardCardsAtTurnStartDef(),
-                        fatigueCount(40, 1, "FatigueP1"),
+                        fatigueCount(40, 1, "FatigueP1")
                     }
                 }
             },
             {
                 id = plid2,
                 --isAi = true,
-                startDraw = 5,
+                startDraw = 0,
                 init = {
                     fromEnv = plid2
                 },
                 cards = {
-                    reserve = {
-                        --{ qty = 1, card = wizard_treasure_map_carddef() }
-                        --{ qty = 1, card = ranger_parrot_carddef() }
-                    },
-                    deck = {
-                    },
-                    hand = {
-                        --{ qty = 1, card = thief_enchanted_garrote_carddef() },
-                        --{ qty = 1, card = ranger_light_crossbow_carddef() },
-                        --{ qty = 1, card = ranger_honed_black_arrow_carddef() },
-                        --{ qty = 2, card = cleric_follower_b_carddef() },
-                        --{ qty = 2, card = cleric_imperial_sailor_carddef() },
-                        --{ qty = 1, card = cleric_brightstar_shield_carddef() },
-                        --{ qty = 1, card = sway_carddef() },
-                    },
-                    discard = {
-                        --{ qty = 2, card = cleric_follower_b_carddef() },
-                    },
-                    skills = {
-                        --{ qty = 1, card = cleric_shining_breastplate_carddef() },
-                    },
                     buffs = {
+                        forceExplosion(),
                         drawCardsCountAtTurnEndDef(5),
                         discardCardsAtTurnStartDef(),
-                        fatigueCount(40, 1, "FatigueP2"),
+                        fatigueCount(40, 1, "FatigueP2")
                     }
                 }
-            },            
+            }
         }
     })
 end
@@ -104,18 +395,63 @@ end
 function endGame(g)
 end
 
-function setupMeta(meta)
-                meta.name = "knights_of_balance_v1"
-                meta.minLevel = 13
-                meta.maxLevel = 24
+
+
+            function setupMeta(meta)
+                meta.name = "echoes_of_valor"
+                meta.minLevel = 0
+                meta.maxLevel = 0
                 meta.introbackground = ""
                 meta.introheader = ""
                 meta.introdescription = ""
-                meta.path = "C:/Users/xTheC/Desktop/Git Repositories/hero-realms-lua-scripts/Knights  of Balance/knights_of_balance_v1.lua"
+                meta.path = "C:/Users/xTheC/Desktop/Git Repositories/hero-realms-lua-scripts/Echoes of Valor/echoes_of_valor.lua"
                 meta.features = {
 }
 
+            end
+
+function forceExplosion()
+    --If Player 1 did not choose who was going first, player 2 goes first
+    return createGlobalBuff({
+        id="forced_explosion",
+        name = "Forced Explosion",
+        abilities = {
+			createAbility({
+                id="forced_ex_go",
+                cost = sacrificeSelfCost,
+                trigger = startOfTurnTrigger,
+                effect = ifElseEffect(selectLoc(loc(currentPid, handPloc)).count().gte(1),
+                                        nullEffect(),
+                                        moveTarget(loc(oppPid, deckPloc)).apply(selectLoc(loc(oppPid, handPloc)).take(5))
+                                        .seq(acquireForFreeTarget().apply(selectLoc(centerRowLoc).where(isCardName("may_i"))))
+                                    )
+            }),
+        }
+    })
 end
+
+function preventDualAbilityUse()
+    --		
+    return createGlobalBuff({
+        id="prevent_dual_ability_use",
+        name = "Prevent Dual Ability Use",
+        abilities = {},
+        cardEffectAbilities = {
+			createCardEffectAbility({
+                id="prevent_dual_use",
+                cost = noCost,
+                trigger =  locationChangedCardTrigger,
+                activations = multipleActivations,
+                effect = ifElseEffect(selectTargets().where(isCardAtLoc(skillSacrificePloc).And(isCardAbility()).And(isCardType(ancestryType).invert())).count().gte(1),
+                                        disableTarget({ endOfTurnExpiry }).apply(selectLoc(loc(currentPid, skillsPloc)).where(isCardAbility().And(isCardType(ancestryType).invert())))
+                                            .seq(sacrificeSelf()),
+                                        nullEffect()
+                                )
+            }),
+        }
+    })
+end
+
 
 --Card Overrides
 --=======================================================================================================
@@ -123,96 +459,95 @@ end
 --Fighter
 --=======================================================================================================
 function fighter_rallying_flag_carddef()
-    local cardLayout = createLayout({
-        name = "Rallying Flag",
-        art = "art/t_fighter_rallying_flag",
-        frame = "frames/Warrior_CardFrame",
-        cardTypeLabel = "Champion",
-        isGuard = true,
-        health = 1,
-        types = { championType, humanType, fighterType },
-        xmlText = [[<vlayout>
-                        <box flexibleheight="1">
-                            <tmpro text="{gold_1}   {combat_1}" fontsize="60"/>
-                        </box>
-                    </vlayout>]]
-    })
-    return createChampionDef({
-        id = "fighter_rallying_flag",
-        name = "Rallying Flag",
-        acquireCost = 0,
-        health = 1,
-        isGuard = true,
-        layout = cardLayout,
-        types = { championType, humanType, fighterType },
-        factions = {},
-        abilities = {
-            createAbility({
-                id = "fighter_rallying_flag",
-                trigger = autoTrigger,
-                activations = multipleActivations,
-                cost = expendCost,
-                effect = gainCombatEffect(1).seq(gainGoldEffect(1))
-            }),
-        }
-    })
-end
---=========================================
-function fighter_helm_of_fury_carddef()
-    local cardLayout = createLayout({
-        name = "Helm of Fury",
-        art = "art/t_fighter_helm_of_fury",
-        frame = "frames/Warrior_CardFrame",
-        cardTypeLabel = "Magical Armor",
-        xmlText =[[<vlayout>
-                        <hlayout flexibleheight="1">
-                            <box flexiblewidth="1">
-                                <tmpro text="{requiresHealth_20}" fontsize="72"/>
+        local cardLayout = createLayout({
+            name = "Rallying Flag",
+            art = "art/t_fighter_rallying_flag",
+            frame = "frames/Warrior_CardFrame",
+            cardTypeLabel = "Champion",
+            isGuard = true,
+            health = 1,
+            types = { championType, humanType, fighterType },
+            xmlText = [[<vlayout>
+                            <box flexibleheight="1">
+                                <tmpro text="{gold_1}   {combat_1}" fontsize="60"/>
                             </box>
-                            <box flexiblewidth="7">
-                                <tmpro text="If you have a guard in play,&lt;br&gt; gain {gold_1} {combat_1}" fontsize="32" />
-                            </box>
-                        </hlayout>
-                </vlayout>
-                    ]]
-    })
-    local guardChamps = selectLoc(loc(currentPid, inPlayPloc)).where(isGuard()).count()
-    local disableHelm = disableTarget({ endOfTurnExpiry }).apply(selectLoc(loc(currentPid, skillsPloc)).where(isCardType(magicArmorType)))
-    --local disableHelm = nullEffect()
-    --
-    return createMagicArmorDef({
-        id = "fighter_helm_of_fury",
-        name = "Helm of Fury",
-        types = {fighterType, magicArmorType, treasureType, headType},
-        layout = cardLayout,
-        layoutPath = "icons/fighter_helm_of_fury",
-        abilities = {
+                        </vlayout>]]
+        })
+        return createChampionDef({
+            id = "fighter_rallying_flag",
+            name = "Rallying Flag",
+            acquireCost = 0,
+            health = 1,
+            isGuard = true,
+            layout = cardLayout,
+            types = { championType, humanType, fighterType },
+            factions = {},
+            abilities = {
                 createAbility({
-                    id = "helmGuard",
+                    id = "fighter_rallying_flag",
                     trigger = autoTrigger,
-                    check = minHealthCurrent(20).And(guardChamps.gte(1)),
-                    effect = gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm)
+                    activations = multipleActivations,
+                    cost = expendCost,
+                    effect = gainCombatEffect(1).seq(gainGoldEffect(1))
                 }),
-                createAbility({
-                    id = "helmLateGuard",
-                    trigger = onPlayTrigger,
-                    activations = singleActivation,
-                    check = minHealthCurrent(20),
-                    effect = ifElseEffect(guardChamps.gte(1),
-                                            gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm),
-                                            nullEffect()) 
-                }),
-                createAbility({
-                    id = "helmHeal",
-                    trigger = gainedHealthTrigger,
-                    activations = singleActivation,
-                    check = minHealthCurrent(20),
-                    effect = ifElseEffect(guardChamps.gte(1),
-                                            gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm),
-                                            nullEffect()) 
-                })
-        }        
-    })
+            }
+        })
+    end
+    --=========================================
+    function fighter_helm_of_fury_carddef()
+        local cardLayout = createLayout({
+            name = "Helm of Fury",
+            art = "art/t_fighter_helm_of_fury",
+            frame = "frames/Warrior_CardFrame",
+            cardTypeLabel = "Magical Armor",
+            xmlText =[[<vlayout>
+                            <hlayout flexibleheight="1">
+                                <box flexiblewidth="1">
+                                    <tmpro text="{requiresHealth_20}" fontsize="72"/>
+                                </box>
+                                <box flexiblewidth="7">
+                                    <tmpro text="If you have a guard in play,&lt;br&gt; gain {gold_1} {combat_1}" fontsize="32" />
+                                </box>
+                            </hlayout>
+                    </vlayout>
+                        ]]
+        })
+        local guardChamps = selectLoc(loc(currentPid, inPlayPloc)).where(isGuard()).count()
+        local disableHelm = disableTarget({ endOfTurnExpiry }).apply(selectLoc(loc(currentPid, skillsPloc)).where(isCardType(magicArmorType)))
+        --
+        return createMagicArmorDef({
+            id = "fighter_helm_of_fury",
+            name = "Helm of Fury",
+            types = {fighterType, magicArmorType, treasureType, headType},
+            layout = cardLayout,
+            layoutPath = "icons/fighter_helm_of_fury",
+            abilities = {
+                    createAbility({
+                        id = "helmGuard",
+                        trigger = autoTrigger,
+                        check = minHealthCurrent(20).And(guardChamps.gte(1)),
+                        effect = gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm)
+                    }),
+                    createAbility({
+                        id = "helmLateGuard",
+                        trigger = onPlayTrigger,
+                        activations = singleActivation,
+                        check = minHealthCurrent(20),
+                        effect = ifElseEffect(guardChamps.gte(1),
+                                                gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm),
+                                                nullEffect()) 
+                    }),
+                    createAbility({
+                        id = "helmHeal",
+                        trigger = gainedHealthTrigger,
+                        activations = singleActivation,
+                        check = minHealthCurrent(20),
+                        effect = ifElseEffect(guardChamps.gte(1),
+                                                gainCombatEffect(1).seq(gainGoldEffect(1)).seq(disableHelm),
+                                                nullEffect()) 
+                    }),
+            }        
+        })
 end
 
 --Wizard
@@ -1130,4 +1465,4 @@ function bard_coat_of_encores_carddef()
         layoutPath = "icons/bard/bard_coat_of_encores",
         layout = cardLayout
     })
-end 
+end             
